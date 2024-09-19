@@ -1,0 +1,62 @@
+const { Client, GatewayIntentBits, Events } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+
+// marcell.js dosyasını yükle
+const config = require('./marcell.js');
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+
+client.commands = new Map();
+const prefixList = ['!', '.', '/']; // Prefixler
+
+// Güvenlik kontrolü
+const checkForTampering = () => {
+    const filePath = path.join(__dirname, 'tampering_check.txt');
+    if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        if (content.includes('marcell')) {
+            console.log('Bot tampered with! Exiting...');
+            process.exit(1);
+        }
+    }
+};
+
+// Botun başında kontrolü yap
+checkForTampering();
+
+// Komut dosyalarını yükle
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    const command = require(filePath);
+    client.commands.set(command.name, command);
+}
+
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot) return;
+
+    const prefix = prefixList.find(p => message.content.startsWith(p));
+    if (!prefix) return;
+
+    const args = message.content.slice(prefix.length).split(/ +/);
+    const commandName = args.shift().toLowerCase();
+
+    if (client.commands.has(commandName)) {
+        const command = client.commands.get(commandName);
+        try {
+            await command.execute(message, args);
+        } catch (error) {
+            console.error(error);
+            message.reply('Bir hata oluştu!');
+        }
+    }
+});
+
+client.once(Events.ClientReady, () => {
+    console.log(`Bot ${client.user.tag} olarak giriş yaptı!`);
+});
+
+client.login(config.token);
